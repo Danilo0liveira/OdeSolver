@@ -9,29 +9,52 @@ using MathNet.Numerics.LinearAlgebra.Factorization;
 using MathNet.Numerics.RootFinding;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 using System.Collections;
-
+using ScottPlot;
 class Program
 {
     static void Main()
     {
-        var u = Vector<double>.Build.Dense(new double[] { 16.6, 0.55, 15.6, 0 });
-        var x0 = Vector<double>.Build.Dense(new double[] {14,-4.32e-4, 5.28e-4, 0});
+        double t = 0;
+        double ta = 0.5;
+        double tf = 600;
+        int it = 0;
+        double array_size = (tf-t)/ta;
+        Vector<double> y;
 
-        var y = phModel(u: u, x0: x0, t: 0, ta: 1);
-        Vector<double> x = y;
+        double[] results = new double[(int)array_size + 1];
+        double[] tempos = new double[(int)array_size + 1];
+        
+        var u = Vector<double>.Build.Dense(new double[] { 16.6, 0.55, 15.6, 0 });
+        var x0 = Vector<double>.Build.Dense(new double[] { 14, -4.32e-4, 5.28e-4, 0 });
+
+        while (t <= tf)
+        {
+            if (t == 200.0)
+                u[2] = u[2]*0.90;
+
+            y = phModel(u: u, x0: x0, t: t, ta: ta);
+
+            results[it] = y[3];
+            tempos[it] = t;
+
+            t += ta;
+            it += 1;
+        }
+
+        ScottPlot.Plot myPlot = new();
+
+        myPlot.Add.Scatter(tempos, results);
+        myPlot.SavePng("ph1.1.png", 400, 300);
     }
-    static Vector<double> phModel(Vector<double> u, Vector<double> x0,double t, double ta)
+    static Vector<double> phModel(Vector<double> u, Vector<double> x0, double t, double ta)
     {
         double pk1 = 6.35;
         double pk2 = 10.25;
-
-        var y = x0;
-
         double q1 = u[0];
         double q2 = u[1];
         double q3 = u[2];
 
-        var ode_out = ModifiedRungeKuttaFourthOrder(y, t, ta, N: 200, (t, y) => dxdt(t, y, q1, q2, q3));
+        var ode_out = ModifiedRungeKuttaFourthOrder(x0, 0, t+ta, N: 100, (t, y) => dxdt(t, y, q1, q2, q3));
 
         Vector<double> x = Vector<double>.Build.Dense(new double[] {
             ode_out[ode_out.Length - 1][0],
@@ -40,13 +63,14 @@ class Program
             ode_out[ode_out.Length - 1][3]}
         );
 
-        y = x;
+        var y = x;
 
-        Func<double, double> ph_func = z => {
-            return y[1] + Math.Pow(10, (z - 14)) + y[2] * ((1 + 2* Math.Pow(10, (z - pk2))) / (1 + Math.Pow(10, (pk1 - z)) + Math.Pow(10, (z - pk2)))) - Math.Pow(10, -z);
+        Func<double, double> ph_func = z =>
+        {
+            return y[1] + Math.Pow(10, (z - 14)) + y[2] * ((1 + 2 * Math.Pow(10, (z - pk2))) / (1 + Math.Pow(10, (pk1 - z)) + Math.Pow(10, (z - pk2)))) - Math.Pow(10, -z);
         };
 
-        double ph_out = Bisection.FindRoot(ph_func, lowerBound: 0, upperBound: 14, accuracy: 1e-6);
+        double ph_out = Bisection.FindRoot(ph_func, lowerBound: 0, upperBound: 14, accuracy: 1e-9);
 
         y[3] = ph_out;
 
@@ -96,9 +120,8 @@ class Program
         double dwa4 = 1 / (A * h) * ((wa1 - wa4) * q1 + (wa2 - wa4) * q2 + (wa3 - wa4) * q3);
         double dwb4 = 1 / (A * h) * ((wb1 - wb4) * q1 + (wb2 - wb4) * q2 + (wb3 - wb4) * q3);
 
-        var _dxdt = Vector<double>.Build.Dense(new double[] {dh, dwa4,dwb4, ph_out});
+        var _dxdt = Vector<double>.Build.Dense(new double[] { dh, dwa4, dwb4, ph_out });
 
         return _dxdt;
     }
-
 }
